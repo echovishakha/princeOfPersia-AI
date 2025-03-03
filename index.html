@@ -1,0 +1,1206 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Prince's Quest</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #111;
+            overflow: hidden;
+            font-family: 'Arial', sans-serif;
+        }
+        #gameContainer {
+            position: relative;
+            width: 800px;
+            height: 500px;
+            margin: 20px auto;
+        }
+        canvas {
+            background: #333;
+            display: block;
+            border: 2px solid #666;
+        }
+        #trivia {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            width: 400px;
+            text-align: center;
+            display: none;
+        }
+        #trivia h2 {
+            color: gold;
+            margin-top: 0;
+        }
+        #trivia button {
+            background: #554;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            margin: 5px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        #trivia button:hover {
+            background: #776;
+        }
+        #gameOver, #gameWin {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            width: 400px;
+            text-align: center;
+            display: none;
+        }
+        #gameOver h2, #gameWin h2 {
+            color: red;
+            margin-top: 0;
+        }
+        #gameWin h2 {
+            color: gold;
+        }
+        #restartButton, #restartWinButton {
+            background: #554;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin-top: 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        #restartButton:hover, #restartWinButton:hover {
+            background: #776;
+        }
+        #tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            pointer-events: none;
+            display: none;
+            z-index: 100;
+        }
+        #instructions {
+            color: white;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <div id="instructions">
+            Use <strong>Arrow Keys</strong> to move. <strong>Up Arrow</strong> to jump. Hover over elements for hints.
+        </div>
+        <canvas id="gameCanvas" width="800" height="500"></canvas>
+        <div id="tooltip"></div>
+        
+        <div id="trivia">
+            <h2>Answer this question to proceed!</h2>
+            <p id="question"></p>
+            <div id="options"></div>
+        </div>
+        
+        <div id="gameOver">
+            <h2>Game Over!</h2>
+            <p>The prince has failed in his quest.</p>
+            <button id="restartButton">Try Again</button>
+        </div>
+        
+        <div id="gameWin">
+            <h2>Victory!</h2>
+            <p>The prince has reached his queen! Love conquers all obstacles.</p>
+            <button id="restartWinButton">Play Again</button>
+        </div>
+    </div>
+
+    <script>
+        // Game initialization
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const tooltip = document.getElementById('tooltip');
+        const triviaDiv = document.getElementById('trivia');
+        const questionElement = document.getElementById('question');
+        const optionsElement = document.getElementById('options');
+        const gameOverDiv = document.getElementById('gameOver');
+        const gameWinDiv = document.getElementById('gameWin');
+        
+        // Game objects and variables
+        const gravity = 0.5;
+        const friction = 0.8;
+        let gameRunning = true;
+        let activeTriviaGate = null;
+        
+        // Player object
+        const player = {
+            x: 50,
+            y: 420,
+            width: 30,
+            height: 50,
+            speed: 5,
+            velX: 0,
+            velY: 0,
+            jumping: false,
+            grounded: false,
+            color: "royalblue",
+            facingRight: true,
+            lives: 3,
+            
+            draw() {
+                // Human-like character
+                
+                // Body
+                ctx.fillStyle = "#1E90FF"; // Royal blue outfit
+                ctx.fillRect(this.x + 8, this.y + 15, this.width - 16, this.height - 20); // Torso
+                
+                // Legs
+                ctx.fillStyle = "#1A1A1A"; // Dark pants
+                ctx.fillRect(this.x + 10, this.y + this.height - 25, 7, 25); // Left leg
+                ctx.fillRect(this.x + this.width - 17, this.y + this.height - 25, 7, 25); // Right leg
+                
+                // Arms
+                ctx.fillStyle = "#FFD700"; // Golden sleeves
+                if (this.facingRight) {
+                    ctx.fillRect(this.x + this.width - 12, this.y + 15, 6, 20); // Right arm
+                    ctx.fillRect(this.x + 6, this.y + 15, 4, 15); // Left arm (behind)
+                } else {
+                    ctx.fillRect(this.x + 6, this.y + 15, 6, 20); // Left arm
+                    ctx.fillRect(this.x + this.width - 10, this.y + 15, 4, 15); // Right arm (behind)
+                }
+                
+                // Head
+                ctx.fillStyle = "#F5DEB3"; // Skin tone
+                ctx.beginPath();
+                ctx.arc(this.x + this.width/2, this.y + 8, 10, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Crown
+                ctx.fillStyle = "gold";
+                ctx.beginPath();
+                ctx.moveTo(this.x + 10, this.y - 2);
+                ctx.lineTo(this.x + 15, this.y - 7);
+                ctx.lineTo(this.x + 20, this.y - 2);
+                ctx.lineTo(this.x + 25, this.y - 7);
+                ctx.lineTo(this.x + this.width - 10, this.y - 2);
+                ctx.fill();
+                
+                // Eyes and mouth
+                ctx.fillStyle = "black";
+                if (this.facingRight) {
+                    ctx.fillRect(this.x + this.width/2 + 3, this.y + 5, 2, 3); // Right eye
+                    ctx.fillRect(this.x + this.width/2 + 2, this.y + 12, 4, 1); // Mouth
+                } else {
+                    ctx.fillRect(this.x + this.width/2 - 5, this.y + 5, 2, 3); // Left eye
+                    ctx.fillRect(this.x + this.width/2 - 6, this.y + 12, 4, 1); // Mouth
+                }
+            },
+            
+            update() {
+                // Apply gravity
+                this.velY += gravity;
+                
+                // Apply horizontal friction
+                this.velX *= friction;
+                
+                // Update position
+                this.x += this.velX;
+                this.y += this.velY;
+                
+                // Floor collision
+                if (this.y > canvas.height - this.height) {
+                    this.y = canvas.height - this.height;
+                    this.velY = 0;
+                    this.jumping = false;
+                    this.grounded = true;
+                }
+                
+                // Ceiling collision
+                if (this.y < 0) {
+                    this.y = 0;
+                    this.velY = 0;
+                }
+                
+                // Wall collision
+                if (this.x < 0) {
+                    this.x = 0;
+                    this.velX = 0;
+                }
+                if (this.x > canvas.width - this.width) {
+                    this.x = canvas.width - this.width;
+                    this.velX = 0;
+                }
+            }
+        };
+        
+        // Queen object
+        const queen = {
+            x: canvas.width - 70,
+            y: 100,
+            width: 30,
+            height: 50,
+            
+            draw() {
+                // Human-like character
+                
+                // Dress
+                ctx.fillStyle = "#800080"; // Purple dress
+                ctx.beginPath();
+                ctx.moveTo(this.x + 5, this.y + 15);
+                ctx.lineTo(this.x + this.width - 5, this.y + 15);
+                ctx.lineTo(this.x + this.width + 5, this.y + this.height);
+                ctx.lineTo(this.x - 5, this.y + this.height);
+                ctx.closePath();
+                ctx.fill();
+                
+                // Upper body
+                ctx.fillStyle = "#9370DB"; // Lighter purple top
+                ctx.fillRect(this.x + 8, this.y + 15, this.width - 16, 10);
+                
+                // Arms
+                ctx.fillStyle = "#F5DEB3"; // Skin tone
+                ctx.fillRect(this.x + 5, this.y + 15, 4, 15); // Left arm
+                ctx.fillRect(this.x + this.width - 9, this.y + 15, 4, 15); // Right arm
+                
+                // Head
+                ctx.fillStyle = "#F5DEB3"; // Skin tone
+                ctx.beginPath();
+                ctx.arc(this.x + this.width/2, this.y + 8, 10, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Hair
+                ctx.fillStyle = "#8B4513"; // Brown hair
+                ctx.beginPath();
+                ctx.arc(this.x + this.width/2, this.y + 6, 12, Math.PI, 2 * Math.PI);
+                ctx.fill();
+                
+                // Crown
+                ctx.fillStyle = "gold";
+                ctx.beginPath();
+                ctx.moveTo(this.x + 8, this.y - 4);
+                ctx.lineTo(this.x + 13, this.y - 10);
+                ctx.lineTo(this.x + 18, this.y - 4);
+                ctx.lineTo(this.x + 23, this.y - 10);
+                ctx.lineTo(this.x + this.width - 8, this.y - 4);
+                ctx.fill();
+                
+                // Eyes and mouth
+                ctx.fillStyle = "black";
+                ctx.fillRect(this.x + this.width/2 - 5, this.y + 5, 2, 3); // Left eye
+                ctx.fillRect(this.x + this.width/2 + 3, this.y + 5, 2, 3); // Right eye
+                ctx.fillRect(this.x + this.width/2 - 3, this.y + 12, 6, 1); // Mouth
+            }
+        };
+        
+        // Platform class
+        class Platform {
+            constructor(x, y, width, height, color = "#854", isLava = false) {
+                this.x = x;
+                this.y = y;
+                this.width = width;
+                this.height = height;
+                this.color = color;
+                this.isLava = isLava;
+                this.hint = isLava ? "Danger! Avoid this lava pit!" : "You can stand on this platform";
+            }
+            
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+            }
+            
+            checkCollision(player) {
+                // Check if player is colliding with platform
+                if (player.x < this.x + this.width &&
+                    player.x + player.width > this.x &&
+                    player.y < this.y + this.height &&
+                    player.y + player.height > this.y) {
+                    
+                    // If it's lava, player dies
+                    if (this.isLava) {
+                        player.lives--;
+                        player.x = 50;
+                        player.y = 420;
+                        player.velX = 0;
+                        player.velY = 0;
+                        
+                        if (player.lives <= 0) {
+                            gameRunning = false;
+                            gameOverDiv.style.display = 'block';
+                        }
+                        return false;
+                    }
+                    
+                    // Top collision (standing on platform)
+                    if (player.velY > 0 && 
+                        player.y + player.height < this.y + this.height / 2) {
+                        player.y = this.y - player.height;
+                        player.velY = 0;
+                        player.jumping = false;
+                        player.grounded = true;
+                        return true;
+                    }
+                    
+                    // Bottom collision (hitting head)
+                    if (player.velY < 0 && 
+                        player.y > this.y + this.height / 2) {
+                        player.y = this.y + this.height;
+                        player.velY = 0;
+                        return false;
+                    }
+                    
+                    // Left collision
+                    if (player.velX > 0 && 
+                        player.x + player.width - player.velX <= this.x) {
+                        player.x = this.x - player.width;
+                        player.velX = 0;
+                        return false;
+                    }
+                    
+                    // Right collision
+                    if (player.velX < 0 && 
+                        player.x - player.velX >= this.x + this.width) {
+                        player.x = this.x + this.width;
+                        player.velX = 0;
+                        return false;
+                    }
+                }
+                return false;
+            }
+        }
+        
+        // Trivia Gate class
+        class TriviaGate {
+            constructor(x, y, question, options, correctAnswer) {
+                this.x = x;
+                this.y = y;
+                this.width = 30;
+                this.height = 80;
+                this.color = "gold";
+                this.question = question;
+                this.options = options;
+                this.correctAnswer = correctAnswer;
+                this.isOpen = false;
+                this.hint = "Answer a trivia question to pass through this gate";
+            }
+            
+            draw() {
+                if (!this.isOpen) {
+                    ctx.fillStyle = this.color;
+                    ctx.fillRect(this.x, this.y, this.width, this.height);
+                    
+                    // Draw question mark
+                    ctx.fillStyle = "black";
+                    ctx.font = "20px Arial";
+                    ctx.fillText("?", this.x + 10, this.y + 45);
+                }
+            }
+            
+            checkCollision(player) {
+                if (this.isOpen) return false;
+                
+                if (player.x < this.x + this.width &&
+                    player.x + player.width > this.x &&
+                    player.y < this.y + this.height &&
+                    player.y + player.height > this.y) {
+                    
+                    // Show trivia question
+                    activeTriviaGate = this;
+                    showTriviaQuestion(this);
+                    gameRunning = false;
+                    
+                    // Reset player position slightly away from gate
+                    player.x = this.x - player.width - 5;
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        // Moving platform class
+        class MovingPlatform extends Platform {
+            constructor(x, y, width, height, endX, speed, color = "#664") {
+                super(x, y, width, height, color);
+                this.startX = x;
+                this.endX = endX;
+                this.speed = speed;
+                this.direction = 1;
+                this.hint = "This platform moves back and forth";
+            }
+            
+            update() {
+                this.x += this.speed * this.direction;
+                
+                if (this.x <= this.startX) {
+                    this.x = this.startX;
+                    this.direction = 1;
+                } else if (this.x >= this.endX) {
+                    this.x = this.endX;
+                    this.direction = -1;
+                }
+            }
+        }
+        
+        // Spike trap class
+        class SpikeTrap extends Platform {
+            constructor(x, y, width, height) {
+                super(x, y, width, height, "#666");
+                this.active = false;
+                this.timer = 0;
+                this.interval = 120; // Frames before toggling
+                this.hint = "Watch out! These spikes appear and disappear";
+            }
+            
+            update() {
+                this.timer++;
+                if (this.timer >= this.interval) {
+                    this.active = !this.active;
+                    this.timer = 0;
+                }
+            }
+            
+            draw() {
+                if (this.active) {
+                    // Draw the base
+                    ctx.fillStyle = "#666";
+                    ctx.fillRect(this.x, this.y + this.height/2, this.width, this.height/2);
+                    
+                    // Draw spikes
+                    ctx.fillStyle = "#999";
+                    const spikeWidth = 6;
+                    const numSpikes = Math.floor(this.width / spikeWidth);
+                    
+                    for (let i = 0; i < numSpikes; i++) {
+                        ctx.beginPath();
+                        ctx.moveTo(this.x + i * spikeWidth, this.y + this.height/2);
+                        ctx.lineTo(this.x + i * spikeWidth + spikeWidth/2, this.y);
+                        ctx.lineTo(this.x + i * spikeWidth + spikeWidth, this.y + this.height/2);
+                        ctx.fill();
+                    }
+                    
+                    this.isLava = true; // Act like lava when active
+                } else {
+                    ctx.fillStyle = "#666";
+                    ctx.fillRect(this.x, this.y + this.height/2, this.width, this.height/2);
+                    this.isLava = false;
+                }
+            }
+        }
+        
+        // Pendulum trap class
+        class Pendulum {
+            constructor(pivotX, pivotY, length, angle, swingRange) {
+                this.pivotX = pivotX;
+                this.pivotY = pivotY;
+                this.length = length;
+                this.angle = angle;
+                this.swingRange = swingRange;
+                this.speed = 0.02;
+                this.direction = 1;
+                this.ballRadius = 15;
+                this.hint = "Avoid this swinging pendulum!";
+            }
+            
+            update() {
+                // Update angle
+                this.angle += this.speed * this.direction;
+                
+                // Change direction at extremes
+                if (this.angle >= this.swingRange || this.angle <= -this.swingRange) {
+                    this.direction *= -1;
+                }
+            }
+            
+            draw() {
+                // Calculate ball position
+                const ballX = this.pivotX + Math.sin(this.angle) * this.length;
+                const ballY = this.pivotY + Math.cos(this.angle) * this.length;
+                
+                // Draw chain
+                ctx.strokeStyle = "#AAA";
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(this.pivotX, this.pivotY);
+                ctx.lineTo(ballX, ballY);
+                ctx.stroke();
+                
+                // Draw pivot
+                ctx.fillStyle = "#888";
+                ctx.beginPath();
+                ctx.arc(this.pivotX, this.pivotY, 5, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Draw ball
+                ctx.fillStyle = "#333";
+                ctx.beginPath();
+                ctx.arc(ballX, ballY, this.ballRadius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            checkCollision(player) {
+                // Calculate ball position
+                const ballX = this.pivotX + Math.sin(this.angle) * this.length;
+                const ballY = this.pivotY + Math.cos(this.angle) * this.length;
+                
+                // Distance between ball center and player center
+                const dx = ballX - (player.x + player.width/2);
+                const dy = ballY - (player.y + player.height/2);
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                // Check if player is too close to the ball
+                if (distance < this.ballRadius + Math.min(player.width, player.height)/2) {
+                    player.lives--;
+                    player.x = 50;
+                    player.y = 420;
+                    player.velX = 0;
+                    player.velY = 0;
+                    
+                    if (player.lives <= 0) {
+                        gameRunning = false;
+                        gameOverDiv.style.display = 'block';
+                    }
+                    return true;
+                }
+                return false;
+            }
+        }
+        
+        // Dragon class
+        class Dragon {
+            constructor(x, y, jumpHeight, fireRate) {
+                this.x = x;
+                this.y = y;
+                this.width = 50;
+                this.height = 40;
+                this.jumpHeight = jumpHeight;
+                this.fireRate = fireRate;
+                this.fireTimer = 0;
+                this.jumping = false;
+                this.velY = 0;
+                this.originalY = y;
+                this.hint = "Beware the fire-breathing dragon!";
+                this.fireballs = [];
+            }
+            
+            update() {
+                // Jumping behavior
+                if (!this.jumping && Math.random() < 0.02) {
+                    this.jumping = true;
+                    this.velY = -this.jumpHeight;
+                }
+                
+                if (this.jumping) {
+                    this.velY += gravity * 0.7;
+                    this.y += this.velY;
+                    
+                    if (this.y >= this.originalY) {
+                        this.y = this.originalY;
+                        this.jumping = false;
+                        this.velY = 0;
+                    }
+                }
+                
+                // Fire breathing
+                this.fireTimer++;
+                if (this.fireTimer >= this.fireRate) {
+                    this.fireTimer = 0;
+                    // Create a new fireball
+                    this.fireballs.push({
+                        x: this.x,
+                        y: this.y + 20,
+                        size: 10,
+                        speed: -3,
+                        active: true
+                    });
+                }
+                
+                // Update fireballs
+                for (let i = 0; i < this.fireballs.length; i++) {
+                    let fireball = this.fireballs[i];
+                    
+                    fireball.x += fireball.speed;
+                    
+                    // Remove fireballs that go off-screen
+                    if (fireball.x + fireball.size < 0) {
+                        fireball.active = false;
+                    }
+                }
+                
+                // Clean up inactive fireballs
+                this.fireballs = this.fireballs.filter(fireball => fireball.active);
+            }
+            
+            draw() {
+                // Body
+                ctx.fillStyle = "#800000"; // Dark red
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+                
+                // Wings
+                ctx.fillStyle = "#660000"; // Darker red
+                ctx.beginPath();
+                ctx.moveTo(this.x + 10, this.y + 5);
+                ctx.lineTo(this.x - 10, this.y - 15);
+                ctx.lineTo(this.x - 5, this.y + 10);
+                ctx.fill();
+                
+                ctx.beginPath();
+                ctx.moveTo(this.x + 40, this.y + 5);
+                ctx.lineTo(this.x + 60, this.y - 15);
+                ctx.lineTo(this.x + 55, this.y + 10);
+                ctx.fill();
+                
+                // Head
+                ctx.fillStyle = "#A00000"; // Lighter red
+                ctx.beginPath();
+                ctx.moveTo(this.x, this.y + 20);
+                ctx.lineTo(this.x - 15, this.y + 15);
+                ctx.lineTo(this.x - 10, this.y + 25);
+                ctx.fill();
+                
+                // Eyes
+                ctx.fillStyle = "yellow";
+                ctx.beginPath();
+                ctx.arc(this.x - 8, this.y + 17, 3, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Draw fireballs
+                for (let fireball of this.fireballs) {
+                    // Gradient for fireball
+                    const gradient = ctx.createRadialGradient(
+                        fireball.x + fireball.size/2, fireball.y + fireball.size/2, 0,
+                        fireball.x + fireball.size/2, fireball.y + fireball.size/2, fireball.size
+                    );
+                    
+                    gradient.addColorStop(0, 'yellow');
+                    gradient.addColorStop(0.7, 'orange');
+                    gradient.addColorStop(1, 'red');
+                    
+                    ctx.fillStyle = gradient;
+                    ctx.beginPath();
+                    ctx.arc(fireball.x + fireball.size/2, fireball.y + fireball.size/2, 
+                             fireball.size, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+            
+            checkCollision(player) {
+                // Check collisions with dragon body
+                if (player.x < this.x + this.width &&
+                    player.x + player.width > this.x &&
+                    player.y < this.y + this.height &&
+                    player.y + player.height > this.y) {
+                    
+                    player.lives--;
+                    player.x = 50;
+                    player.y = 420;
+                    player.velX = 0;
+                    player.velY = 0;
+                    
+                    if (player.lives <= 0) {
+                        gameRunning = false;
+                        gameOverDiv.style.display = 'block';
+                    }
+                    return true;
+                }
+                
+                // Check collisions with fireballs
+                for (let fireball of this.fireballs) {
+                    if (fireball.active &&
+                        player.x < fireball.x + fireball.size * 2 &&
+                        player.x + player.width > fireball.x &&
+                        player.y < fireball.y + fireball.size * 2 &&
+                        player.y + player.height > fireball.y) {
+                        
+                        fireball.active = false;
+                        player.lives--;
+                        
+                        if (player.lives <= 0) {
+                            gameRunning = false;
+                            gameOverDiv.style.display = 'block';
+                        }
+                        return true;
+                    }
+                }
+                
+                return false;
+            }
+        }
+        
+        // Falling rock class
+        class FallingRock {
+            constructor(x, minY, maxY, size, interval) {
+                this.x = x;
+                this.minY = minY;
+                this.maxY = maxY;
+                this.y = minY;
+                this.size = size;
+                this.active = false;
+                this.falling = false;
+                this.velY = 0;
+                this.interval = interval;
+                this.timer = Math.floor(Math.random() * interval); // Randomize start time
+                this.hint = "Watch out for falling rocks!";
+            }
+            
+            update() {
+                if (!this.falling) {
+                    this.timer++;
+                    if (this.timer >= this.interval) {
+                        this.falling = true;
+                        this.active = true;
+                        this.timer = 0;
+                    }
+                } else {
+                    // Apply gravity
+                    this.velY += gravity * 1.5;
+                    this.y += this.velY;
+                    
+                    // Reset when it hits the bottom
+                    if (this.y > this.maxY) {
+                        this.reset();
+                    }
+                }
+            }
+            
+            reset() {
+                this.y = this.minY;
+                this.velY = 0;
+                this.falling = false;
+                this.active = false;
+            }
+            
+            draw() {
+                if (this.active) {
+                    // Draw a rock
+                    ctx.fillStyle = "#777";
+                    ctx.beginPath();
+                    ctx.arc(this.x + this.size/2, this.y + this.size/2, 
+                             this.size/2, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // Add some details to make it look like a rock
+                    ctx.strokeStyle = "#555";
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(this.x + this.size/4, this.y + this.size/4);
+                    ctx.lineTo(this.x + this.size/2, this.y + this.size/3);
+                    ctx.stroke();
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(this.x + this.size*3/4, this.y + this.size/2);
+                    ctx.lineTo(this.x + this.size*2/3, this.y + this.size*3/4);
+                    ctx.stroke();
+                }
+            }
+            
+            checkCollision(player) {
+                if (this.active &&
+                    player.x < this.x + this.size &&
+                    player.x + player.width > this.x &&
+                    player.y < this.y + this.size &&
+                    player.y + player.height > this.y) {
+                    
+                    this.reset();
+                    player.lives--;
+                    
+                    if (player.lives <= 0) {
+                        gameRunning = false;
+                        gameOverDiv.style.display = 'block';
+                    }
+                    return true;
+                }
+                return false;
+            }
+        }
+        
+        // Create platforms
+        const platforms = [
+            // Ground platforms
+            new Platform(0, 470, 150, 30),
+            new Platform(200, 470, 150, 30),
+            new Platform(400, 470, 150, 30),
+            new Platform(600, 470, 200, 30),
+            
+            // Middle platforms
+            new Platform(100, 380, 80, 20),
+            new Platform(230, 330, 80, 20),
+            new Platform(350, 380, 80, 20),
+            new Platform(480, 330, 80, 20),
+            
+            // Upper platforms
+            new Platform(150, 240, 70, 20),
+            new Platform(280, 200, 70, 20),
+            new Platform(420, 150, 100, 20),
+            
+            // Lava pits
+            new Platform(150, 470, 50, 30, "red", true),
+            new Platform(350, 470, 50, 30, "red", true),
+            new Platform(550, 470, 50, 30, "red", true),
+            
+            // Queen's platform
+            new Platform(650, 150, 100, 20)
+        ];
+        
+        // Create spike traps
+        const spikeTraps = [
+            new SpikeTrap(280, 310, 80, 20),
+            new SpikeTrap(420, 130, 100, 20)
+        ];
+        
+        // Create pendulums
+        const pendulums = [
+            new Pendulum(400, 250, 100, 0, 0.8),
+            new Pendulum(200, 150, 80, 0.5, 0.6)
+        ];
+        
+        // Create falling rocks
+        const fallingRocks = [
+            new FallingRock(180, 20, 470, 20, 180),
+            new FallingRock(320, 20, 470, 22, 240),
+            new FallingRock(500, 20, 470, 18, 150)
+        ];
+        
+        // Create dragon
+        const dragon = new Dragon(600, 110, 8, 120);
+        
+        // Create moving platforms
+        const movingPlatforms = [
+            new MovingPlatform(520, 250, 70, 15, 650, 1.5),
+            new MovingPlatform(200, 290, 70, 15, 320, 1.2)
+        ];
+        
+        // Create trivia gates
+        const triviaGates = [
+            new TriviaGate(320, 390, 
+                "What was the first Prince of Persia game released in?",
+                ["1985", "1989", "1992", "1995"],
+                "1989"),
+            new TriviaGate(630, 150, 
+                "Which ancient civilization is most associated with Prince of Persia?",
+                ["Egyptian", "Persian", "Roman", "Greek"],
+                "Persian"),
+            new TriviaGate(420, 320, 
+                "What famous game mechanic did Prince of Persia introduce?",
+                ["First-person shooting", "Realistic jumping animations", "Open world exploration", "Multiplayer battles"],
+                "Realistic jumping animations")
+        ];
+        
+        // Key state tracking
+        const keys = {};
+        
+        // Event listeners
+        window.addEventListener("keydown", function(e) {
+            keys[e.key] = true;
+        });
+        
+        window.addEventListener("keyup", function(e) {
+            keys[e.key] = false;
+        });
+        
+        // Hover for hints
+        canvas.addEventListener("mousemove", function(e) {
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            
+            let showingHint = false;
+            
+            // Check platforms
+            for (let platform of platforms) {
+                if (mouseX >= platform.x && mouseX <= platform.x + platform.width &&
+                    mouseY >= platform.y && mouseY <= platform.y + platform.height) {
+                    tooltip.style.display = 'block';
+                    tooltip.style.left = (e.clientX + 10) + 'px';
+                    tooltip.style.top = (e.clientY + 10) + 'px';
+                    tooltip.textContent = platform.hint;
+                    showingHint = true;
+                    break;
+                }
+            }
+            
+            // Check moving platforms
+            if (!showingHint) {
+                for (let platform of movingPlatforms) {
+                    if (mouseX >= platform.x && mouseX <= platform.x + platform.width &&
+                        mouseY >= platform.y && mouseY <= platform.y + platform.height) {
+                        tooltip.style.display = 'block';
+                        tooltip.style.left = (e.clientX + 10) + 'px';
+                        tooltip.style.top = (e.clientY + 10) + 'px';
+                        tooltip.textContent = platform.hint;
+                        showingHint = true;
+                        break;
+                    }
+                }
+            }
+            
+            // Check trivia gates
+            if (!showingHint) {
+                for (let gate of triviaGates) {
+                    if (!gate.isOpen && mouseX >= gate.x && mouseX <= gate.x + gate.width &&
+                        mouseY >= gate.y && mouseY <= gate.y + gate.height) {
+                        tooltip.style.display = 'block';
+                        tooltip.style.left = (e.clientX + 10) + 'px';
+                        tooltip.style.top = (e.clientY + 10) + 'px';
+                        tooltip.textContent = gate.hint;
+                        showingHint = true;
+                        break;
+                    }
+                }
+            }
+            
+            // Check queen
+            if (!showingHint && 
+                mouseX >= queen.x && mouseX <= queen.x + queen.width &&
+                mouseY >= queen.y && mouseY <= queen.y + queen.height) {
+                tooltip.style.display = 'block';
+                tooltip.style.left = (e.clientX + 10) + 'px';
+                tooltip.style.top = (e.clientY + 10) + 'px';
+                tooltip.textContent = "Reach the queen to win the game!";
+                showingHint = true;
+            }
+            
+            if (!showingHint) {
+                tooltip.style.display = 'none';
+            }
+        });
+        
+        canvas.addEventListener("mouseout", function() {
+            tooltip.style.display = 'none';
+        });
+        
+        // Restart button
+        document.getElementById('restartButton').addEventListener('click', function() {
+            resetGame();
+        });
+        
+        document.getElementById('restartWinButton').addEventListener('click', function() {
+            resetGame();
+        });
+        
+        // Show trivia question
+        function showTriviaQuestion(gate) {
+            questionElement.textContent = gate.question;
+            optionsElement.innerHTML = '';
+            
+            gate.options.forEach(option => {
+                const button = document.createElement('button');
+                button.textContent = option;
+                button.addEventListener('click', function() {
+                    if (option === gate.correctAnswer) {
+                        // Correct answer
+                        gate.isOpen = true;
+                        triviaDiv.style.display = 'none';
+                        gameRunning = true;
+                        activeTriviaGate = null;
+                    } else {
+                        // Wrong answer - penalize player
+                        player.lives--;
+                        
+                        if (player.lives <= 0) {
+                            gameRunning = false;
+                            triviaDiv.style.display = 'none';
+                            gameOverDiv.style.display = 'block';
+                        } else {
+                            // Let them try again
+                            triviaDiv.style.display = 'none';
+                            gameRunning = true;
+                            activeTriviaGate = null;
+                        }
+                    }
+                });
+                optionsElement.appendChild(button);
+            });
+            
+            triviaDiv.style.display = 'block';
+        }
+        
+        // Game reset
+        function resetGame() {
+            player.x = 50;
+            player.y = 420;
+            player.velX = 0;
+            player.velY = 0;
+            player.lives = 3;
+            
+            // Reset trivia gates
+            triviaGates.forEach(gate => {
+                gate.isOpen = false;
+            });
+            
+            gameRunning = true;
+            gameOverDiv.style.display = 'none';
+            gameWinDiv.style.display = 'none';
+        }
+        
+        // Game loop
+        function gameLoop() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            if (gameRunning) {
+                // Handle player input
+                if (keys["ArrowLeft"]) {
+                    player.velX = -player.speed;
+                    player.facingRight = false;
+                }
+                if (keys["ArrowRight"]) {
+                    player.velX = player.speed;
+                    player.facingRight = true;
+                }
+                if (keys["ArrowUp"] && !player.jumping && player.grounded) {
+                    player.jumping = true;
+                    player.grounded = false;
+                    player.velY = -12;
+                }
+                
+                // Update player
+                player.update();
+                
+                // Update moving platforms
+                for (let platform of movingPlatforms) {
+                    platform.update();
+                }
+                
+                // Update spike traps
+                for (let trap of spikeTraps) {
+                    trap.update();
+                }
+                
+                // Update pendulums
+                for (let pendulum of pendulums) {
+                    pendulum.update();
+                }
+                
+                // Update falling rocks
+                for (let rock of fallingRocks) {
+                    rock.update();
+                }
+                
+                // Update dragon
+                dragon.update();
+                
+                // Check platform collisions
+                player.grounded = false;
+                for (let platform of platforms) {
+                    if (platform.checkCollision(player) && !player.grounded) {
+                        player.grounded = true;
+                    }
+                }
+                
+                // Check spike trap collisions
+                for (let trap of spikeTraps) {
+                    if (trap.checkCollision(player) && trap.active && !player.grounded) {
+                        player.grounded = true;
+                    }
+                }
+                
+                // Check moving platform collisions
+                for (let platform of movingPlatforms) {
+                    if (platform.checkCollision(player) && !player.grounded) {
+                        player.grounded = true;
+                        // Move player with platform
+                        player.x += platform.speed * platform.direction;
+                    }
+                }
+                
+                // Check trivia gate collisions
+                for (let gate of triviaGates) {
+                    gate.checkCollision(player);
+                }
+                
+                // Check pendulum collisions
+                for (let pendulum of pendulums) {
+                    pendulum.checkCollision(player);
+                }
+                
+                // Check falling rock collisions
+                for (let rock of fallingRocks) {
+                    rock.checkCollision(player);
+                }
+                
+                // Check dragon collisions
+                dragon.checkCollision(player);
+                
+                // Check if player reached the queen
+                if (player.x < queen.x + queen.width &&
+                    player.x + player.width > queen.x &&
+                    player.y < queen.y + queen.height &&
+                    player.y + player.height > queen.y) {
+                    gameRunning = false;
+                    gameWinDiv.style.display = 'block';
+                }
+            }
+            
+            // Draw background 
+            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            gradient.addColorStop(0, "#114");
+            gradient.addColorStop(1, "#336");
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw platforms
+            for (let platform of platforms) {
+                platform.draw();
+            }
+            
+            // Draw spike traps
+            for (let trap of spikeTraps) {
+                trap.draw();
+            }
+            
+            // Draw moving platforms
+            for (let platform of movingPlatforms) {
+                platform.draw();
+            }
+            
+            // Draw falling rocks
+            for (let rock of fallingRocks) {
+                rock.draw();
+            }
+            
+            // Draw trivia gates
+            for (let gate of triviaGates) {
+                gate.draw();
+            }
+            
+            // Draw pendulums
+            for (let pendulum of pendulums) {
+                pendulum.draw();
+            }
+            
+            // Draw queen
+            queen.draw();
+            
+            // Draw dragon
+            dragon.draw();
+            
+            // Draw player
+            player.draw();
+            
+            // Draw lives
+            ctx.fillStyle = "white";
+            ctx.font = "16px Arial";
+            ctx.fillText("Lives: " + player.lives, 20, 30);
+            
+            // Continue game loop
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Start game
+        gameLoop();
+    </script>
+</body>
+</html>
